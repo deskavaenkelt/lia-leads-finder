@@ -4,8 +4,18 @@ def test_lia_keyword(): assert score_seniority("LIA-plats för Python-student") 
 def test_junior_keyword(): assert score_seniority("We are looking for a trainee developer") == 100.0
 def test_praktikant(): assert score_seniority("Vi söker en praktikant till vårt team") == 100.0
 def test_nyexaminerad(): assert score_seniority("Perfekt för nyexaminerad") == 100.0
-def test_internutbildning(): assert score_seniority("Vi erbjuder internutbildning") == 100.0
 def test_internship(): assert score_seniority("Looking for an internship") == 100.0
+
+def test_internutbildning_not_a_junior_signal():
+    # "internutbildning" (in-house/internal training) is too ambiguous to use as
+    # a junior signal — found via audit: a Uppsala Universitet adjunct-lecturer
+    # posting (needs near-PhD qualifications) scored 100 because its merits
+    # section mentioned "handledning, internutbildning eller mentorsprogram"
+    # as a teaching credential the *candidate* should already have, nothing to
+    # do with the role being entry-level.
+    title = "Tidsbegränsad universitetsadjunkt i gränssnittsprogrammering"
+    description = "Förutom akademisk meritering kan även utbildnings- och undervisningsmeritering, som inbegriper till exempel handledning, internutbildning eller mentorsprogram, beaktas."
+    assert score_seniority(title, description) == 50.0
 
 def test_intern_not_false_positive():
     assert score_seniority("internal tooling team") == 50.0
@@ -108,4 +118,41 @@ def test_examensarbete_thesis_posting_scores_junior():
 def test_inclusive_ad_with_no_title_signal_still_lets_junior_win():
     title = "Intresseanmälan Fullstack Engineer"
     description = "Är du en junior/medior eller erfaren Fullstack Engineer som älskar modern systemutveckling?"
+    assert score_seniority(title, description) == 100.0
+
+# --- second audit round (2026-09-13), C#/DevOps/JavaScript/Testare/AI searches ---
+
+def test_generic_title_but_lead_sentence_says_senior():
+    # AF's headline field is often generic ("AI Engineer - Machine Learning")
+    # while the real level claim is the description's opening sentence — a
+    # bare "junior" mention deep in a later requirements bullet shouldn't win.
+    title = "AI Engineer - Machine Learning"
+    description = (
+        "Job Description: We are looking for a Senior Machine Learning Engineer "
+        "to enhance our client's data platform with AI capabilities. The person "
+        "we are seeking has experience from the whole ML chain including data, "
+        "feature, model, deployment and monitoring, plus cost consciousness. "
+        "Skills required: strong Python, Azure AI stack, RAG systems, and "
+        "experience mentoring junior ML and data engineers."
+    )
+    assert score_seniority(title, description) == 10.0
+
+def test_borjan_av_karriaren_phrase_scores_junior():
+    title = "Mjukvaruingenjör inom testautomation"
+    description = "Är du i början av din karriär och vill arbeta i gränslandet mellan mjukvara, elektronik och produktion?"
+    assert score_seniority(title, description) == 100.0
+
+def test_praktik_idiom_strategi_och_praktik_is_not_a_junior_signal():
+    # "praktik" also just means "practice" (vs. theory) in Swedish — this
+    # common idiom caused a public-sector "erfaren systemutvecklare" posting
+    # to score as junior/LIA-friendly.
+    title = "Systemutvecklare med fokus på AI och dataanalys"
+    description = "Vi söker en erfaren systemutvecklare. Här trivs du som vill vara med och skapa nytt, testa, lära och skala det som fungerar i vardagen, från strategi till praktik."
+    assert score_seniority(title, description) == 10.0
+
+def test_praktik_idiom_does_not_suppress_a_real_praktik_mention_elsewhere():
+    # the idiom guard should only strip the idiom phrase itself, not any
+    # genuine standalone "praktik" mention in the same ad
+    title = "Utvecklare"
+    description = "Vi jobbar med allt från strategi till praktik. Vi erbjuder också praktikplats för studerande."
     assert score_seniority(title, description) == 100.0
