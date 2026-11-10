@@ -2,6 +2,7 @@ import io
 import ipaddress
 import json
 import re
+import socket
 from urllib.parse import urlparse
 
 import httpx
@@ -9,9 +10,27 @@ import pdfplumber
 from bs4 import BeautifulSoup
 from llm_client import complete
 
+MAX_REDIRECTS = 5
+
+
+def _is_disallowed_ip(addr: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_reserved
+        or addr.is_multicast
+        or addr.is_unspecified
+    )
+
 
 def _is_safe_url(url: str) -> bool:
-    """Reject private IPs, loopback, and non-http(s) schemes to prevent SSRF."""
+    """Reject private/loopback/reserved targets and non-http(s) schemes to prevent SSRF.
+
+    Resolves the hostname via DNS and validates every resulting IP, so a hostname
+    that merely *resolves* to an internal address (or a numeric/hex/octal IP
+    literal) is rejected too — not just literal private-IP strings.
+    """
     try:
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https"):
@@ -20,12 +39,39 @@ def _is_safe_url(url: str) -> bool:
         if not host:
             return False
         try:
-            addr = ipaddress.ip_address(host)
-            return not (addr.is_private or addr.is_loopback or addr.is_link_local or addr.is_reserved)
-        except ValueError:
-            return host.lower() not in ("localhost", "0.0.0.0")
+            infos = socket.getaddrinfo(host, None)
+        except socket.gaierror:
+            return False
+        if not infos:
+            return False
+        for info in infos:
+            ip_str = info[4][0].split("%", 1)[0]  # strip IPv6 zone id
+            try:
+                addr = ipaddress.ip_address(ip_str)
+            except ValueError:
+                return False
+            if _is_disallowed_ip(addr):
+                return False
+        return True
     except Exception:
         return False
+
+
+async def _safe_get(client: httpx.AsyncClient, url: str) -> httpx.Response:
+    """GET with manually-followed redirects, re-validating each hop against SSRF rules."""
+    for _ in range(MAX_REDIRECTS + 1):
+        if not _is_safe_url(url):
+            raise ValueError(f"unsafe URL: {url}")
+        response = await client.get(url)
+        if response.is_redirect:
+            location = response.headers.get("location")
+            if not location:
+                break
+            url = str(httpx.URL(location, base=response.url))
+            continue
+        response.raise_for_status()
+        return response
+    raise ValueError("too many redirects")
 
 KNOWN_TECH = [
     # Languages
@@ -105,8 +151,7 @@ async def scrape_program(url: str) -> list[str]:
         return []
     try:
         async with httpx.AsyncClient(timeout=15, follow_redirects=False) as client:
-            response = await client.get(url)
-            response.raise_for_status()
+            response = await _safe_get(client, url)
             content_type = response.headers.get("content-type", "")
             if "pdf" in content_type or url.lower().endswith(".pdf"):
                 return await _extract_from_pdf_bytes(response.content)
@@ -123,11 +168,8 @@ async def scrape_program(url: str) -> list[str]:
             ]
             pdf_text = ""
             for pdf_url in pdf_links[:2]:  # max 2 PDFs to keep it fast
-                if not _is_safe_url(pdf_url):
-                    continue
                 try:
-                    pdf_resp = await client.get(pdf_url)
-                    pdf_resp.raise_for_status()
+                    pdf_resp = await _safe_get(client, pdf_url)
                     with pdfplumber.open(io.BytesIO(pdf_resp.content)) as pdf:
                         pdf_text += " " + " ".join(page.extract_text() or "" for page in pdf.pages)
                 except Exception:

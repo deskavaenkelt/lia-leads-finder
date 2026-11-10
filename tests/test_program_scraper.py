@@ -6,7 +6,7 @@ from pipeline.enrichment.program_scraper import scrape_program
 @pytest.mark.asyncio
 async def test_extracts_python():
     html = "<html><body><p>This course covers Python and Django</p></body></html>"
-    mock_resp = MagicMock(text=html, raise_for_status=MagicMock())
+    mock_resp = MagicMock(text=html, raise_for_status=MagicMock(), is_redirect=False)
     with patch("pipeline.enrichment.program_scraper.httpx.AsyncClient") as mc:
         mc.return_value.__aenter__ = AsyncMock(return_value=MagicMock(get=AsyncMock(return_value=mock_resp)))
         mc.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -18,7 +18,7 @@ async def test_extracts_python():
 @pytest.mark.asyncio
 async def test_no_java_from_javascript():
     html = "<html><body><p>Learn JavaScript and React</p></body></html>"
-    mock_resp = MagicMock(text=html, raise_for_status=MagicMock())
+    mock_resp = MagicMock(text=html, raise_for_status=MagicMock(), is_redirect=False)
     with patch("pipeline.enrichment.program_scraper.httpx.AsyncClient") as mc:
         mc.return_value.__aenter__ = AsyncMock(return_value=MagicMock(get=AsyncMock(return_value=mock_resp)))
         mc.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -40,7 +40,7 @@ async def test_network_error_returns_empty():
 @pytest.mark.asyncio
 async def test_deduplicates():
     html = "<html><body><p>Python Python Python</p></body></html>"
-    mock_resp = MagicMock(text=html, raise_for_status=MagicMock())
+    mock_resp = MagicMock(text=html, raise_for_status=MagicMock(), is_redirect=False)
     with patch("pipeline.enrichment.program_scraper.httpx.AsyncClient") as mc:
         mc.return_value.__aenter__ = AsyncMock(return_value=MagicMock(get=AsyncMock(return_value=mock_resp)))
         mc.return_value.__aexit__ = AsyncMock(return_value=False)
@@ -51,7 +51,7 @@ async def test_deduplicates():
 @pytest.mark.asyncio
 async def test_case_insensitive_match():
     html = "<html><body><p>We use python and DOCKER</p></body></html>"
-    mock_resp = MagicMock(text=html, raise_for_status=MagicMock())
+    mock_resp = MagicMock(text=html, raise_for_status=MagicMock(), is_redirect=False)
     with patch("pipeline.enrichment.program_scraper.httpx.AsyncClient") as mc:
         mc.return_value.__aenter__ = AsyncMock(return_value=MagicMock(get=AsyncMock(return_value=mock_resp)))
         mc.return_value.__aexit__ = AsyncMock(return_value=False)
