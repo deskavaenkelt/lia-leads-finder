@@ -57,11 +57,57 @@
       cityInput.disabled = cb.checked;
       cityInput.placeholder = cb.checked ? 'Hela Sverige' : 't.ex. Göteborg';
     }
+
+    const SEARCH_SETTINGS_KEY = 'lia-search-settings';
+
+    function saveSearchSettings() {
+      try {
+        localStorage.setItem(SEARCH_SETTINGS_KEY, JSON.stringify({
+          city: document.getElementById('city').value,
+          radius_km: document.getElementById('radius_km').value,
+          tech_stack: document.getElementById('tech_stack').value,
+          program_url: document.getElementById('program_url').value,
+          all_sweden: document.getElementById('all_sweden').checked,
+        }));
+      } catch (e) { /* localStorage unavailable (private mode, blocked, ...) — skip saving */ }
+    }
+
+    function restoreSearchSettings() {
+      try {
+        const raw = localStorage.getItem(SEARCH_SETTINGS_KEY);
+        if (!raw) return;
+        const settings = JSON.parse(raw);
+
+        if (settings.city) document.getElementById('city').value = settings.city;
+        if (settings.radius_km) document.getElementById('radius_km').value = settings.radius_km;
+        if (settings.tech_stack) document.getElementById('tech_stack').value = settings.tech_stack;
+        if (settings.program_url) document.getElementById('program_url').value = settings.program_url;
+        if (settings.all_sweden) {
+          const allSwedenBox = document.getElementById('all_sweden');
+          allSwedenBox.checked = true;
+          toggleCity(allSwedenBox);
+        }
+      } catch (e) { /* malformed or unavailable storage — start from server defaults */ }
+    }
+
+    restoreSearchSettings();
+
     document.querySelector('.search-form').addEventListener('submit', function() {
+      saveSearchSettings();
       const btn = document.getElementById('submit-btn');
       btn.disabled = true;
       document.getElementById('btn-text').hidden = true;
       document.getElementById('btn-spinner').hidden = false;
+    });
+
+    // Navigating back (e.g. a mobile swipe-back) can restore this page from
+    // the browser's bfcache with the button still stuck in its "searching…"
+    // state from before — reset it whenever the page becomes visible again.
+    window.addEventListener('pageshow', function() {
+      const btn = document.getElementById('submit-btn');
+      btn.disabled = false;
+      document.getElementById('btn-text').hidden = false;
+      document.getElementById('btn-spinner').hidden = true;
     });
   </script>
 </body>
