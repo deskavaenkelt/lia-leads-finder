@@ -27,7 +27,7 @@ def _assemble(
     tech_score = analyze_tech(config.tech_stack, analysis_text)
     if geo_score is None:
         geo_score = score_geo(company.city, config.city, config.all_sweden)
-    seniority_score = score_seniority(analysis_text)
+    seniority_score = score_seniority(company.job_title or "", company.description or "")
     breakdown = ScoreBreakdown(
         tech_match=tech_score,
         geo=geo_score,
